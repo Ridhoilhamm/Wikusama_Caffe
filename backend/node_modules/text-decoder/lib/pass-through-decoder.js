@@ -1,5 +1,3 @@
-const b4a = require('b4a')
-
 module.exports = class PassThroughDecoder {
   constructor (encoding) {
     this.encoding = encoding
@@ -10,7 +8,7 @@ module.exports = class PassThroughDecoder {
   }
 
   decode (tail) {
-    return b4a.toString(tail, this.encoding)
+    return tail.toString(this.encoding)
   }
 
   flush () {

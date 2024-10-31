@@ -1,59 +1,54 @@
-// Navbar.jsx
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 
 const Navbar = () => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [isScrolled, setIsScrolled] = useState(false); // State untuk mendeteksi scroll
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    // Lakukan sesuatu dengan searchQuery, seperti memanggil API atau redirect ke halaman hasil pencarian
-    console.log('Search query:', searchQuery);
-  };
+  // Fungsi untuk mendeteksi scroll dan mengubah state
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 0) {
+        setIsScrolled(true);
+      } else {
+        setIsScrolled(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
 
   return (
-    <nav className="bg-blue-500 p-4 flex justify-between items-center">
+    <nav
+    className={`fixed w-[calc(100%-256px)] top-0 right-0 z-50 p-4 transition-all duration-300  ${
+      isScrolled ? 'bg-gray-800 bg-opacity-90' : 'bg-gray-800'
+    }`}
+  >
+    <div className="container mx-auto flex items-center justify-between">
       {/* Logo */}
-      <div className="text-white font-bold text-lg">
-        <Link to="/home">Caffe</Link>
-      </div>
-
-      {/* Links */}
-      <ul className="flex space-x-4">
-        <li>
-          <Link to="/home" className="text-white hover:underline">
-            Home
-          </Link>
-        </li>
-        <li>
-          <Link to="/menu" className="text-white hover:underline">
-            Menu
-          </Link>
-        </li>
-        <li>
-          <Link to="/about" className="text-white hover:underline">
-            About
-          </Link>
-        </li>
-      </ul>
-
-      {/* Search Form */}
-      <form onSubmit={handleSearch} className="flex items-center">
+      <div></div>
+  
+      {/* Search Bar */}
+      <form className="flex items-center">
         <input
           type="text"
-          className="px-4 py-2 rounded-l-md focus:outline-none"
-          placeholder="Search..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Cari sesuatu..."
+          className="p-2 rounded-l-md border-none focus:outline-none"
         />
         <button
           type="submit"
-          className="bg-white text-blue-500 px-4 py-2 rounded-r-md hover:bg-gray-200 transition duration-200"
+          className="bg-white text-blue-600 p-2 rounded-r-md hover:bg-gray-200"
         >
-          Search
+          Cari
         </button>
       </form>
-    </nav>
+  
+      <div></div>
+    </div>
+  </nav>
+  
   );
 };
 

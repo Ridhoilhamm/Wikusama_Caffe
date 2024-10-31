@@ -1,4 +1,4 @@
-const transaksi = require("../models/index").transaksi;
+const transaksi = require(`../models/index`).transaksi;
 const Op = require("sequelize").Op;
 const model = require("../models/index");
 const fs = require('fs')
@@ -11,31 +11,33 @@ const menu = model.menu;
 // const easyinvoice = require('easyinvoice')
 
 exports.getAll = async (request, response) => {
-  transaksi
-    .findAll({
+  try {
+    let result = await transaksi.findAll({
       include: [
+        'meja',
+        'user',
         {
-          model: user,
-          as: "user",
-        },
-        {
-          model: model.meja,
-          as: "meja",
+          model: detail,
+          as: 'detail',
+          include: ['menu'],
         },
       ],
-    })
-    .then((result) => {
-      response.status(200).json({
-        success: true,
-        data: result,
-      });
-    })
-    .catch((error) => {
-      response.status(400).json({
-        success: false,
-        message: error.message,
-      });
+      order: [['id_transaksi', 'DESC']],
     });
+  
+
+    const totalTransaksi = result.length;
+    return response.json({
+      status: true,
+      data: result,
+      totalTransaksi
+    });
+  } catch (error) {
+    return response.json({
+      status: false,
+      message: error.message,
+    });
+  }
 };
 
 exports.getID = async (request, response) => {
@@ -109,48 +111,88 @@ exports.getIdUser = async (request, response) => {
     });
 };
 
-exports.addTransaksi = async (request, response) => {
-  const dataTransaksi = {
-    id_user: request.body.id_user,
-    id_meja: request.body.id_meja,
-    nama_pelanggan: request.body.nama_pelanggan,
-    tgl_transaksi: new Date(),
-    status: request.body.status,
-  };
-  transaksi.create(dataTransaksi).then((result) => {
-    let id_transaksi = result.id_transaksi;
-    let detail_transaksi = request.body.detail_transaksi;
-    let total = 0;
 
-    for (let i = 0; i < detail_transaksi.length; i++) {
-      detail_transaksi[i].id_transaksi = id_transaksi;
-      detail_transaksi[i].harga =
-        detail_transaksi[i].jumlah * detail_transaksi[i].harga;
-      total += detail_transaksi[i].harga;
-      if (detail_transaksi[i].jumlah < 1) {
+//menambahkan trnsaksi
+exports.addTransaksi = async (request, response) => {
+  try {
+    let status = request.body.status || 'belum_bayar';
+    let idMeja = request.body.id_meja;
+
+    // Cek apakah meja dikirim dari request body
+    if (idMeja) {
+      let checkMeja = await meja.findOne({
+        where: { id_meja: idMeja, status: 'kosong' },
+      });
+
+      // Jika meja ada tapi statusnya bukan 'kosong', return error
+      if (!checkMeja) {
         return response.json({
-          message: "pelit banget",
+          status: false,
+          message: 'Meja yang dipilih sedang terisi atau tidak ada',
         });
       }
-    }
-    detail
-      .bulkCreate(detail_transaksi)
-      .then((result) => {
-        return response.json({
-          success: true,
-          data: result,
-          message: "Order list has created",
-        });
-      })
-      .catch((error) => {
-        return response.json({
-          success: false,
-          message: error.message,
-        });
+    } else {
+      // Jika id_meja tidak dikirim, cari meja yang kosong secara otomatis
+      let availableMeja = await meja.findOne({
+        where: { status: 'kosong' },
       });
-  });
+
+      if (!availableMeja) {
+        return response.json({
+          status: false,
+          message: 'Tidak ada meja kosong yang tersedia',
+        });
+      }
+
+      idMeja = availableMeja.id_meja;
+    }
+
+    let transaksis = {
+      tgl_transaksi: new Date().toLocaleString('en-US', {
+        timeZone: 'Asia/Jakarta',
+      }),
+      id_user: request.body.id_user,
+      id_meja: idMeja,
+      nama_pelanggan: request.body.nama_pelanggan,
+      harga: request.body.harga,
+      status: status,
+    };
+
+    let insertTransaksi = await transaksi.create(transaksis);
+
+    let transaksiID = insertTransaksi.id_transaksi;
+    let arrayDetail = request.body.detail_transaksi;
+
+    if (arrayDetail) {
+      for (let i = 0; i < arrayDetail.length; i++) {
+        arrayDetail[i].id_transaksi = transaksiID;
+      }
+
+      await detail.bulkCreate(arrayDetail);
+    }
+
+    if (status === 'belum_bayar') {
+      await meja.update(
+        { status: 'terisi' },
+        { where: { id_meja: idMeja } }
+      );
+    }
+
+    return response.json({
+      status: true,
+      insertTransaksi,
+      message:
+        'Data transaksi berhasil ditambahkan dengan harga pada detail_transaksi',
+    });
+  } catch (error) {
+    return response.json({
+      status: false,
+      message: error.message,
+    });
+  }
 };
 
+// melakukan delete transaksi
 exports.deleteTransaksi = async (request, response) => {
   const param = { id_transaksi: request.params.id };
   detail
@@ -197,6 +239,8 @@ exports.deleteTransaksi = async (request, response) => {
     });
 };
 
+
+//mengupdate transaksi
 exports.editTransaksi = async (request, response) => {
   const param = { id_transaksi: request.params.id };
   const dataTransaksi = {
@@ -212,7 +256,6 @@ exports.editTransaksi = async (request, response) => {
         .then((result) => {
           response.status(200).json({
             success: true,
-            message: "yeay",
             data: {
               id_transaksi: param.id_transaksi,
               ...dataTransaksi,
@@ -241,8 +284,21 @@ exports.editTransaksi = async (request, response) => {
   });
 };
 
+
+// melakukan filtering by tanggal
 exports.filtertanggal = async (request, response) => {
   const { startDate, endDate } = request.params;
+
+  // Validasi parameter
+  if (!startDate || !endDate) {
+    return response.status(400).json({
+      success: false,
+      message: "Start date and end date are required.",
+    });
+  }
+
+  console.log("Start Date:", startDate);
+  console.log("End Date:", endDate);
 
   try {
     const transactions = await transaksi.findAll({
@@ -257,8 +313,18 @@ exports.filtertanggal = async (request, response) => {
           as: "user",
         },
         {
-          model: model.meja,
+          model: meja,
           as: "meja",
+        },
+        {
+          model: detail, // menambahkan relasi detail ke transaksi
+          as: "detail",
+          include: [
+            {
+              model: menu, // pastikan model `menu` juga di-include untuk mendapatkan nama menu, harga, dll.
+              as: "menu",
+            },
+          ],
         },
       ],
     });
@@ -275,13 +341,60 @@ exports.filtertanggal = async (request, response) => {
       data: transactions,
     });
   } catch (error) {
-    return response.status(400).json({
+    return response.status(500).json({
       success: false,
-      message: error.message,
+      message: "An error occurred while fetching transactions: " + error.message,
     });
   }
 };
+// Pastikan ini ada di bagian atas file
 
+// exports.filtertanggal = async (request, response) => {
+//   // Mendapatkan tanggal hari ini
+//   const today = new Date();
+//   const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+//   const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1) - 1; // 23:59:59
+
+//   try {
+//     const transactions = await transaksi.findAll({
+//       where: {
+//         tgl_transaksi: {
+//           [Op.between]: [startOfDay, endOfDay],
+//         },
+//       },
+//       include: [
+//         {
+//           model: user,
+//           as: "user",
+//         },
+//         {
+//           model: model.meja,
+//           as: "meja",
+//         },
+//       ],
+//     });
+
+//     if (transactions.length === 0) {
+//       return response.status(404).json({
+//         success: false,
+//         message: "No transactions found for today.",
+//       });
+//     }
+
+//     return response.status(200).json({
+//       success: true,
+//       data: transactions,
+//     });
+//   } catch (error) {
+//     return response.status(500).json({
+//       success: false,
+//       message: "An error occurred while fetching transactions: " + error.message,
+//     });
+//   }
+// };
+
+
+//melakukan filterNama 
 exports.filterNamaUser = async (request, response) => {
   const param = { nama_user: request.body.nama_user };
   user
@@ -332,6 +445,8 @@ exports.filterNamaUser = async (request, response) => {
     });
 };
 
+
+//melakukan filtering bulan
 exports.filterBulan = async (request, response) => {
   const param = { bulan_transaksi: request.params.bulan_transaksi };
   transaksi
@@ -379,7 +494,7 @@ exports.orderHistory = async (request, response) => {
       include: [
         {
           model: detail,
-          as: "detail_transaksi",
+          as: "detail",
         },
       ],
     });
@@ -420,7 +535,7 @@ exports.receipt = async (request, response) => {
     });
     if (!dataTransaksi) {
       return response.status(404).json({
-        status: false,
+        success: false,
         message: "not found",
       });
     }
@@ -445,25 +560,32 @@ exports.receipt = async (request, response) => {
       total,
     };
 
-    const printstruk = (struk) => `
+  const printstruk = (struk) => `
   <!DOCTYPE html>
   <html lang="en">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-      body { font-family: Arial, sans-serif; margin: 20px; }
-      table { width: 100%; border-collapse: collapse; }
-      th, td { padding: 8px 12px; border-bottom: 1px solid #ddd; }
-      th { background-color: #f4f4f4; }
-      h2 { text-align: center; }
+      body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
       .store-info { text-align: center; margin-bottom: 20px; }
+      .store-info h2 { margin: 10px 0 5px; }
       .store-info p { margin: 4px 0; }
+      .logo { display: block; margin: 0 auto 10px; max-width: 80px; }
+      
+      table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+      th, td { padding: 8px 12px; border-bottom: 1px solid #ddd; text-align: center; }
+      th { background-color: #f4f4f4; }
+      tr:nth-child(even) { background-color: #f9f9f9; }
+      
+      h2, h3 { text-align: center; }
+      h3 { margin-top: 20px; color: #333; }
     </style>
   </head>
   <body>
     <div class="store-info">
-      <h2>APALA</h2>
+      <img src="public/assets/logo.png" alt="Logo" class="logo" />
+      <h2>Caffe</h2>
       <p>Malang, Indonesia</p>
       <p><strong>Date:</strong> ${struk.tanggal}</p>
     </div>
@@ -500,6 +622,7 @@ exports.receipt = async (request, response) => {
   </html>
 `;
 
+
 const strukHTML = printstruk(struk)
 const directory = path.join(__dirname, '../receipt')
 if(!fs.existsSync(directory)) {
@@ -518,11 +641,79 @@ await page.pdf({
 await browser.close()
 
 response.json({
+  success: true,
   message: 'receipt generated successfully', file
 })
 
   } catch (error) {
     response.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+exports.totalPenjualan = async (request, response) => {
+  try {
+    const totalPenjualan = await transaksi.findAll({
+      include: [
+        {
+          model: detail,
+          as: 'detail',
+          include: ['menu'],
+        },
+      ],
+    });
+
+    // Menghitung total penjualan dari semua transaksi
+    let total = 0;
+    totalPenjualan.forEach((transaksi) => {
+      transaksi.detail.forEach((detail) => {
+        total += detail.harga * detail.jumlah; // harga per item dikalikan jumlah
+      });
+    });
+
+    response.status(200).json({
+      success: true,
+      totalPenjualan: total,
+      message: 'Total penjualan berhasil dihitung',
+    });
+  } catch (error) {
+    response.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+//melakukan gruping menu 
+exports.getMostTransactedMenu = async (request, response) => {
+  try {
+    // Menghitung jumlah transaksi per id_menu
+    let mostTransactedMenus = await detail.findAll({
+      attributes: [
+        'id_menu',
+        [sequelize.fn('COUNT', sequelize.col('id_menu')), 'jumlah_terjual'],
+      ],
+      group: ['id_menu'],
+      order: [[sequelize.literal('jumlah_terjual'), 'DESC']],
+      limit: 1, // Mengambil menu dengan transaksi terbanyak
+      include: [
+        {
+          model: menu, // Asosiasikan dengan tabel menu untuk mendapatkan detail menu
+          attributes: ['nama_menu', 'harga'], // Sesuaikan atribut yang ingin ditampilkan
+        },
+      ],
+    });
+
+    return response.json({
+      status: true,
+      data: mostTransactedMenus,
+      message: 'Menu dengan transaksi terbanyak berhasil ditampilkan',
+    });
+  } catch (error) {
+    return response.json({
+      status: false,
       message: error.message,
     });
   }

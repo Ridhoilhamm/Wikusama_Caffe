@@ -1,8 +1,9 @@
 const user = require("../models/index").user;
+const jwt = require("jsonwebtoken");
 const Op = require("sequelize").Op;
 const md5 = require("md5");
 const jsonwebtoken = require("jsonwebtoken");
-const SECRET_KEY = "indomie";
+const SECRET_KEY = "ridho";
 const Sequelize = require('sequelize')
 const sequelize = new Sequelize("cafe_ukk", "root", "", {
   host: "localhost",
@@ -77,11 +78,12 @@ exports.Login = async (request, response) => {
     if (findUser == null) {
       //kalo ga ada
       return response.status(400).json({
-        message: "You can't log in", //ga bisa log in
+        message: "username and password wrong!", //ga bisa log in
       });
     }
     let tokenPayLoad = {
       //bikin payload buat token
+      id_user: findUser.id_user,
       username: findUser.username,
       role: findUser.role,
       nama_user: findUser.nama_user,
@@ -89,8 +91,8 @@ exports.Login = async (request, response) => {
     tokenPayLoad = JSON.stringify(tokenPayLoad);
     let token = await jsonwebtoken.sign(tokenPayLoad, SECRET_KEY);//payload yang udah ada di sign in pake library jwt
     response.cookie('token', token, {
-      httpOnly: true, // Mencegah akses dari JavaScript (XSS protection)
-      secure: process.env.NODE_ENV === 'production', // Hanya kirim cookie di HTTPS (secure flag)
+      // httpOnly: true, // Mencegah akses dari JavaScript (XSS protection)
+      // secure: process.env.NODE_ENV === 'production', // Hanya kirim cookie di HTTPS (secure flag)
     });
 
     return response.status(200).json({
@@ -113,6 +115,33 @@ exports.Login = async (request, response) => {
     });
   }
 };
+
+
+exports.refreshToken = async(req, res) =>{
+  try {
+      const refreshToken = req.cookies.refreshToken;
+      if(!refreshToken) return res.sendStatus(401);
+      const user = await user.findAll({
+          where: {
+              refresh_token : refreshToken,
+          }
+      });
+      if(!user[0]) return res.sendStatus(403);
+      jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, decoded)=>{
+          if(err) return res.sendStatus(403);
+          const id = user[0].id;
+          const nama_user = user[0].nama_user;
+          const username = user[0].username;
+          const role= user[0].role;
+          const accessToken = jwt.sign({id, nama_user, username, role}, process.env.ACCESS_TOKEN_SECRET,{
+              expiresIn: '5s'
+          });
+          res.json({accessToken});
+      });
+  } catch (error) {
+      console.log(error);
+    }
+}
 
 exports.Logout = (request, response) => {
   try {
@@ -219,9 +248,11 @@ exports.getAllUser = async (request, response) => {
       message: "no user to show",
     });
   }
+  const userCount = users.length;
   return response.json({
     status: true,
     success: users,
+    totalUsers: userCount,  
     message: `All user have been loaded`,
   });
 };

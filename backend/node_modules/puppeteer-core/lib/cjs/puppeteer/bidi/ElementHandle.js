@@ -41,7 +41,7 @@ var __esDecorate = (this && this.__esDecorate) || function (ctor, descriptorIn, 
 var __addDisposableResource = (this && this.__addDisposableResource) || function (env, value, async) {
     if (value !== null && value !== void 0) {
         if (typeof value !== "object" && typeof value !== "function") throw new TypeError("Object expected.");
-        var dispose;
+        var dispose, inner;
         if (async) {
             if (!Symbol.asyncDispose) throw new TypeError("Symbol.asyncDispose is not defined.");
             dispose = value[Symbol.asyncDispose];
@@ -49,8 +49,10 @@ var __addDisposableResource = (this && this.__addDisposableResource) || function
         if (dispose === void 0) {
             if (!Symbol.dispose) throw new TypeError("Symbol.dispose is not defined.");
             dispose = value[Symbol.dispose];
+            if (async) inner = dispose;
         }
         if (typeof dispose !== "function") throw new TypeError("Object not disposable.");
+        if (inner) dispose = function() { try { inner.call(this); } catch (e) { return Promise.reject(e); } };
         env.stack.push({ value: value, dispose: dispose, async: async });
     }
     else if (async) {
@@ -94,7 +96,6 @@ const JSHandle_js_1 = require("./JSHandle.js");
  * @internal
  */
 let BidiElementHandle = (() => {
-    var _a;
     let _classSuper = ElementHandle_js_1.ElementHandle;
     let _instanceExtraInitializers = [];
     let _autofill_decorators;
@@ -103,7 +104,7 @@ let BidiElementHandle = (() => {
         static {
             const _metadata = typeof Symbol === "function" && Symbol.metadata ? Object.create(_classSuper[Symbol.metadata] ?? null) : void 0;
             _autofill_decorators = [(0, decorators_js_1.throwIfDisposed)()];
-            _contentFrame_decorators = [(0, decorators_js_1.throwIfDisposed)(), (_a = ElementHandle_js_1.ElementHandle).bindIsolatedHandle.bind(_a)];
+            _contentFrame_decorators = [(0, decorators_js_1.throwIfDisposed)(), ElementHandle_js_1.bindIsolatedHandle];
             __esDecorate(this, null, _autofill_decorators, { kind: "method", name: "autofill", static: false, private: false, access: { has: obj => "autofill" in obj, get: obj => obj.autofill }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(this, null, _contentFrame_decorators, { kind: "method", name: "contentFrame", static: false, private: false, access: { has: obj => "contentFrame" in obj, get: obj => obj.contentFrame }, metadata: _metadata }, null, _instanceExtraInitializers);
             if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });

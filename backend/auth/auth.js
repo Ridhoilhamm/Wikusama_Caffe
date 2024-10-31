@@ -1,7 +1,7 @@
 const jsonwebtoken = require("jsonwebtoken");
 const SECRET_KEY = "ridho";
 
-const authVerify = async(req, res, next) => {
+const authVerify = async(req, res, next) => {   
     try{
         const header = req.headers.authorization; //minta token
         if(header == null){  //kalo ga ada token

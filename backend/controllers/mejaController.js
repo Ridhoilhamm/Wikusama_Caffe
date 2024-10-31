@@ -1,22 +1,24 @@
 const meja = require("../models/index").meja;
 
 exports.getAllMeja = async (request, response) => {
-  meja
-    .findAll()
-    .then((result) => {
-      response.status(200).json({
-        success: true,
-        data: result,
-        message: "yeay",
-      });
-    })
-    .catch((error) => {
-      response.status(400).json({
-        success: false,
-        message: error.message,
-      });
+  try {
+    const result = await meja.findAll(); // Ambil semua meja
+    const mejaCount = result.length; // Hitung jumlah meja
+
+    response.status(200).json({
+      success: true,
+      data: result,
+      totalMeja: mejaCount, // Gunakan totalMeja untuk konsistensi penamaan
+      message: "Yeay",
     });
+  } catch (error) {
+    response.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
+
 
 exports.getByID = async (request, response) => {
   meja

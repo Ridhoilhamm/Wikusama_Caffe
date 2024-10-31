@@ -75,6 +75,17 @@ exports.getById = async (request, response) => {
 
 exports.addMenu = (request, response) => {
   upload(request, response, async (error) => {
+
+    const hargaMenu = parseFloat(request.body.harga);
+    
+    // Validasi harga tidak boleh negatif
+    if (hargaMenu < 0) {
+      return response.status(400).json({
+        success: false,
+        message: "Harga tidak boleh negatif",
+      });
+    }
+    
     const dataMenu = {
       nama_menu: request.body.nama_menu,
       jenis: request.body.jenis,
